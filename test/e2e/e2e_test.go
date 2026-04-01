@@ -71,13 +71,17 @@ spec:
 `, p.Name, nsName))
 
 	// HTTPRoute with path-based + header-based routing
+	hostnamesYAML := ""
+	if gatewayHostname != "" {
+		hostnamesYAML = fmt.Sprintf("\n  hostnames:\n  - %s", gatewayHostname)
+	}
 	kubectlApplyLiteral(fmt.Sprintf(`
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: e2e-%s
   namespace: %s
-spec:
+spec:%s
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
@@ -108,7 +112,7 @@ spec:
     backendRefs:
     - name: %s-backend
       port: 443
-`, p.Name, nsName, gatewayName, gatewayNs, p.Name, p.Name, p.Name, p.Name))
+`, p.Name, nsName, hostnamesYAML, gatewayName, gatewayNs, p.Name, p.Name, p.Name, p.Name))
 }
 
 func deleteProviderResources(p Provider) {
@@ -128,18 +132,25 @@ func getCurlCommand(modelName string) []string {
 	bodyBytes, _ := json.Marshal(body)
 
 	// Access gateway service from inside the cluster via DNS.
-	// Istio creates a service named <gateway-name>-istio for each Gateway.
-	svcName := gatewayName + "-istio"
+	// Istio creates a service named <gateway-name>-istio for each Gateway (vanilla Istio).
+	// OpenShift uses <gateway-name>-<gateway-class> pattern.
 	gatewayURL := fmt.Sprintf("http://%s.%s.svc:80/%s/v1/chat/completions",
-		svcName, gatewayNs, modelName)
+		gatewaySvcName, gatewayNs, modelName)
 
-	return []string{
+	cmd := []string{
 		"curl", "-si", "--max-time", strconv.Itoa(int(curlTimeout.Seconds())),
 		gatewayURL,
 		"-H", "Content-Type: application/json",
 		"-H", "Connection: close",
-		"-d", string(bodyBytes),
 	}
+
+	// Add Host header for OpenShift gateways with specific listener hostnames
+	if gatewayHostname != "" {
+		cmd = append(cmd, "-H", fmt.Sprintf("Host: %s", gatewayHostname))
+	}
+
+	cmd = append(cmd, "-d", string(bodyBytes))
+	return cmd
 }
 
 var _ = ginkgo.Describe("BBR Plugin Chain", func() {

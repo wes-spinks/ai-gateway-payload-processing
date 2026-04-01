@@ -27,12 +27,14 @@ const (
 )
 
 var (
-	kubeClient  kubernetes.Interface
-	nsName      string
-	gatewayNs   string
-	gatewayName string
-	simulatorEP string
-	curlTimeout = 30 * time.Second
+	kubeClient       kubernetes.Interface
+	nsName           string
+	gatewayNs        string
+	gatewayName      string
+	gatewaySvcName   string
+	gatewayHostname  string
+	simulatorEP      string
+	curlTimeout      = 30 * time.Second
 )
 
 func TestE2E(t *testing.T) {
@@ -45,6 +47,10 @@ var _ = ginkgo.BeforeSuite(func() {
 	gatewayNs = envOr("E2E_GATEWAY_NAMESPACE", defaultGatewayNamespace)
 	gatewayName = envOr("E2E_GATEWAY_NAME", defaultGatewayName)
 	simulatorEP = envOr("E2E_SIMULATOR_ENDPOINT", defaultSimulatorEndpoint)
+	// Gateway service name: defaults to Istio convention, can override for OpenShift
+	gatewaySvcName = envOr("E2E_GATEWAY_SERVICE_NAME", gatewayName+"-istio")
+	// Gateway hostname: required for OpenShift gateways with specific listener hostnames
+	gatewayHostname = os.Getenv("E2E_GATEWAY_HOSTNAME") // empty string if not set
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(), nil,
