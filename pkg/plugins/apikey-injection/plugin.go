@@ -74,7 +74,7 @@ func NewAPIKeyInjectionPlugin(reconcilerBuilder func() *builder.Builder, clientR
 			provider.OpenAI:        &auth.SimpleAuthGenerator{HeaderName: "Authorization", HeaderValuePrefix: "Bearer "},
 			provider.Anthropic:     &auth.SimpleAuthGenerator{HeaderName: "x-api-key"},
 			provider.AzureOpenAI:   &auth.SimpleAuthGenerator{HeaderName: "api-key"},
-			provider.Vertex:        &auth.SimpleAuthGenerator{HeaderName: "Authorization", HeaderValuePrefix: "Bearer "},
+			provider.Vertex:        &auth.SimpleAuthGenerator{HeaderName: "x-goog-api-key"},
 			provider.BedrockOpenAI: &auth.SimpleAuthGenerator{HeaderName: "Authorization", HeaderValuePrefix: "Bearer "},
 		},
 		store: store,
@@ -138,20 +138,6 @@ func (p *ApiKeyInjectionPlugin) ProcessRequest(ctx context.Context, cycleState *
 	authHeaders, err := generator.GenerateAuthHeaders(credentials)
 	if err != nil {
 		return errcommon.Error{Code: errcommon.Internal, Msg: fmt.Sprintf("failed to generate auth headers for provider '%s': %v", providerName, err)}
-	}
-
-	// Special handling for Vertex/Gemini: append API key as query parameter to :path
-	// Google Generative Language API requires ?key=<api-key> query parameter, not Authorization header
-	if providerName == "vertex" {
-		if path, ok := request.Headers[":path"]; ok {
-			apiKey, _ := credentials["api-key"]
-			newPath := fmt.Sprintf("%s?key=%s", path, apiKey)
-			log.FromContext(ctx).V(logutil.VERBOSE).Info("modifying :path for vertex", "original", path, "new", newPath)
-			request.SetHeader(":path", newPath)
-			log.FromContext(ctx).V(logutil.VERBOSE).Info("appended API key as query parameter to :path", "provider", providerName)
-		} else {
-			log.FromContext(ctx).V(logutil.VERBOSE).Info(":path header not found in request", "provider", providerName)
-		}
 	}
 
 	for headerKey, headerValue := range authHeaders {
